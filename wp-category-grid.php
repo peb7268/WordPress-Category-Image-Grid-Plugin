@@ -21,13 +21,16 @@
  * 
  *-------------------------------------------------------------------------------------------------------------------*/
 
-/*-- Do some setup ---------------------------------------------------------------------------------------------------------------------------------------------------------*/
+/*-- Initial Configs -----------------------------------------------------------------------------------------------------------------------------------------------------------*/
+$categories = featured_post_meta();
+$iterator = array('i'=>0, 'count'=>$categories['cat_count']);
+
+/*-- Utility Functions ---------------------------------------------------------------------------------------------------------------------------------------------------------*/
 function pre($array){
 	echo '<pre>'; 	
 		 	print_r($array);
 	echo '</pre><br />';
 }
-
 
 /* wp_register_script( $handle, $src, $deps, $ver, $in_footer );
 wp_register_style( $handle, $src, $deps, $ver, $media ) */
@@ -36,13 +39,22 @@ wp_register_style( 'grid_css', plugins_url( '/css/grid.css', __FILE__ ));
 wp_enqueue_script( 'grid_js');
 
 /*---------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-
-
-
-
-/*-- Main Function ---------------------------------------------------------------------------------------------------------------------------------------------------------*/
-function printGrid(){
+function featured_post_meta(){
 	$categories = get_categories();
+	$categories_data = array(
+		'categories' => $categories,
+		'cat_count' => count($categories)		
+	);
+	return $categories_data;
+}
+
+
+/*-- Main Function -------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+function printGrid(){
+	$categories = featured_post_meta();
+	$categories = $categories['categories'];
+	
+	
 	$cat_array = array();
 	$img_array = array();
 	$string = '<div id="category-grid" style="overflow: hidden;">';
@@ -88,17 +100,17 @@ function printGrid(){
 	$string .= "</div><!-- ends #category-grid -->";
 	return $string;
 }
+
 /*------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 
 
 
 
-/*-- Define my functions---------------------------------------------------------------------------------------------------------------------------------------------------------*/
+/*-- Define my functions------------------------------------------------------------------------------------------------------------------------------------------------*/
 function sendStyles(){
 	wp_enqueue_style( 'grid_css');
 }
-
 function add_button() {
    if ( current_user_can('edit_posts') &&  current_user_can('edit_pages') )
    {
@@ -115,15 +127,10 @@ function add_plugin($plugin_array) {
    return $plugin_array;
 }
 
-/*------------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
 
 
-
-
-
-
-
-/*-- Render The Menu -----------------------------------------------------------------------------------------------------------------------------------------------------------*/
+/*-- The Backend: Render The Menu ---------------------------------------------------------------------------------------------------------------------------------------------------------*/
 function create_grid_menu_page(){
 	add_menu_page(				//add_menu_page( $page_title, $menu_title, $capability, $menu_slug, $function, $icon_url, $position );
 		'Grid Options',			// The title to be displayed on the corresponding page for this menu
@@ -135,10 +142,8 @@ function create_grid_menu_page(){
 	);
 }
 
-
 //Makes the options page
 function grid_page_render(){ ?>
-
 	<div class="wrap">
 		<div id="icon-themes" class="icon32"></div>
 		<h2>Category Grid Options</h2>
@@ -153,65 +158,83 @@ function grid_page_render(){ ?>
 			<?php submit_button(); ?>
 		</form>
 	</div>
-	
+
 <?php }
 
 
-
-function grid_options() { 
-	if( false == get_option( 'grid_display_options' ) ) {
-		update_option( 'grid_display_options' );
+//Function that calls grid_options based on how many category items we have
+function grid_init($iterator){
+	global $iterator;
+	
+	$i = $iterator['i'];	
+	$count = $iterator['count'];
+	
+	while($i < $count) {
+	//echo 'grid options, $i: '. $i . ' and $count is: '. $count;
+		grid_options($i, $count);	
+		$i++;
 	}
+}
+
+function grid_options($i, $count) { 
+	//Problem up here causing an extra item to be printed think its in the add settings field
+	//echo '<h1>Grid Options #'.$i.'</h1>';
+	//Capture info from the form
+	$grid_display_options = array(
+		'show_category'=>$_POST['show_category']
+		//'show_body' => $_POST['show_body']
+	);
+	
+	//Handle saving the defaults and updating the settings
+	if( false == get_option( 'grid_display_options' ) ) {
+		//if there arent any settings, set some defaults
+		$grid_display_options = array('defaults');
+		update_option( 'grid_display_options',  $grid_display_options);
+	} else {
+		//If we have settings get them
+		$options = $grid_display_options;
+		if(isset($_POST['submit'])){
+			update_option( 'grid_display_options',  $grid_display_options);
+		}
+	}
+	
 	add_settings_section(
 		'grid_settings_section',			// ID used to identify this section and with which to register options
-		'',	// Title to be displayed on the administration page
-		'grid_render_options',				// Callback used to render the content of the section
+		'',									// Title to be displayed on the administration page
+		'grid_render',						// Callback used to render the content of the section
 		'grid'								// Page on which to add this section of options ( do_settings_sections( ) accepts this name as a parameter )
 	);
 	
-	add_settings_field(						//add_settings_field( $id, $title, $callback, $page, $section, $args );
-		'show_header',						// ID used to identify the input to be generated
-		'Header',							// The label to the left of the input. The text that will be generated
-		'grid_render_first',				// The name of the function responsible for rendering the option interface, Name and id of the input should match the $id given to this function.
-		'grid',								// The page on which this option will be displayed
-		'grid_settings_section',			// The name of the section to which this field belongs
-		'The First Input'
-	);
 	
-	add_settings_field(
-		'show_body',						// ID used to identify the field throughout the theme
-		'Body',								// The label to the left of the option interface element
-		'grid_render_second',				// The name of the function responsible for rendering the option interface
-		'grid',								// The page on which this option will be displayed
-		'grid_settings_section',			// The name of the section to which this field belongs
-		'The Second Input'
-	);
-	
+	//While loop to add new fields
+	while($i < $count){
+		add_settings_field(						//add_settings_field( $id, $title, $callback, $page, $section, $args );
+			'show_category_'.$i,				// ID used to identify the input to be generated
+			'Category '.$i,						// The label to the left of the input. The text that will be generated
+			'grid_render',						// The name of the function responsible for rendering the option interface, Name and id of the input should match the $id given to this function.
+			'grid',								// The page on which this option will be displayed
+			'grid_settings_section',			// The name of the section to which this field belongs
+			array('i'=>$i)
+		);
+		$i++;
+	}
+		
 	//Should Match the settings_field() parameter above in the form
 	register_setting('grid_settings_section','grid_display_options');
-
 }
 
-function grid_render_first($args) { 
- 
+
+
+function grid_render($args) { 
+	 $i = $args['i'];
      // Get an array of the options
-    $options = get_option('grid_display_options'); 
+     $options = get_option('grid_display_options');
  	
     // Next, we update the name attribute to access this element's ID in the context of the display options array  
-    // We also access the show_header element of the options collection in the call to the checked() helper function  
-    $html = '<input type="checkbox" id="show_header" name="grid_display_options[show_header]" value="1"'.checked(1, get_option('show_footer'), false).'/>';   
+    // We also access the show_category element of the options collection in the call to the checked() helper function  
+    $html = '<label for="show_category_'.$i.'">Show Category</label><input type="checkbox" id="show_category'.$i.'" name="grid_display_options[show_category]" value="1"'.checked(1,$options['show_category'], false).'/>';   
+    //$html = '<input type="text" id="field_'.$args['i'].'" name="show_category" value="'.$options['show_category'].'" />';   
  
-    echo $html; 
-}
-
-function grid_render_second($args) {  	
-    // Get an array of the options
-    $options = get_option('grid_display_options'); 
- 	
-    // Next, we update the name attribute to access this element's ID in the context of the display options array  
-    // We also access the show_header element of the options collection in the call to the checked() helper function  
-    $html = '<input type="checkbox" id="show_body" name="grid_display_options[show_body]" value="1"'.checked(1, get_option('show_footer'), false).'/>';   
-    
     echo $html; 
 }
 
@@ -224,7 +247,7 @@ function grid_render_second($args) {
 /*-- Hook my toys into WordPress ---------------------------------------------------------------------------------------------------------------------------------------------------------*/
 add_action('wp_print_styles','sendStyles');
 add_action('init', 'add_button');
-add_action('admin_init', 'grid_options');
+add_action('admin_init', 'grid_init', 10, $iterator);
 add_action('admin_menu', 'create_grid_menu_page');
 
 //Add my shortcodes
